@@ -1,0 +1,74 @@
+@model ControlInventario.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Iniciar Sesión";
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Control de Inventario</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        .login-container {
+            background: #ffffff;
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 410px;
+        }
+        .form-control {
+            padding: 0.7rem 1rem;
+            border-radius: 8px;
+        }
+        .btn-login {
+            padding: 0.75rem;
+            border-radius: 50px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="text-center mb-4">
+            <h3 class="fw-bold text-dark mb-1">Control de Inventario</h3>
+            <p class="text-muted small mb-0">Ingrese sus credenciales para acceder al sistema</p>
+        </div>
+        
+        <form asp-controller="Account" asp-action="Login" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
+            
+            <div class="form-group mb-3">
+                <label asp-for="Username" class="form-label fw-semibold small text-secondary"></label>
+                <input asp-for="Username" class="form-control" placeholder="Ingrese su usuario" />
+                <span asp-validation-for="Username" class="text-danger small"></span>
+            </div>
+            
+            <div class="form-group mb-4">
+                <label asp-for="Password" class="form-label fw-semibold small text-secondary"></label>
+                <input asp-for="Password" class="form-control" placeholder="Ingrese su contraseña" />
+                <span asp-validation-for="Password" class="text-danger small"></span>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-login w-100">Ingresar</button>
+        </form>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

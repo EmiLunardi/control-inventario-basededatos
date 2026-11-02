@@ -1,0 +1,897 @@
+@model ControlInventario.Models.DashboardViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Tablero de Control";
+    var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var productosJson = JsonSerializer.Serialize(Model.Productos.Select(p => new {
+        p.Id,
+        p.CodigoSku,
+        p.Nombre,
+        p.CategoriaId,
+        p.CategoriaNombre,
+        p.ProveedorNombre,
+        p.PrecioCosto,
+        p.Precio,
+        p.StockActual,
+        p.StockMinimo,
+        p.StockOptimo,
+        Estado = p.ObtenerEstadoSemaforo(),
+        ClaseBadge = p.ObtenerClaseBadge(),
+        PorcentajeSobreMinimo = p.ObtenerPorcentajeSobreMinimo()
+    }), jsonOptions);
+
+    var stockSucursalesJson = JsonSerializer.Serialize(Model.StockPorSucursal.Select(s => new {
+        s.Id,
+        s.ProductoId,
+        s.CodigoSku,
+        s.ProductoNombre,
+        s.CategoriaNombre,
+        s.SucursalId,
+        s.SucursalNombre,
+        s.CantidadActual,
+        s.PuntoReorden,
+        Estado = s.ObtenerEstadoSemaforo(),
+        ClaseBadge = s.ObtenerClaseBadge()
+    }), jsonOptions);
+
+    var movimientosJson = JsonSerializer.Serialize(Model.Movimientos.Select(m => new {
+        m.Id,
+        m.ProductoId,
+        m.CodigoSku,
+        m.ProductoNombre,
+        m.CategoriaNombre,
+        m.SucursalId,
+        m.SucursalNombre,
+        m.UsuarioNombre,
+        m.TipoMovimiento,
+        m.Cantidad,
+        m.Motivo,
+        FechaFormateada = m.Fecha.ToString("yyyy-MM-dd HH:mm")
+    }), jsonOptions);
+}
+
+<div class="container-fluid">
+    <!-- Encabezado y Selector de Sucursal -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h2 class="fw-bold mb-1">Tablero de Control</h2>
+            <p class="text-muted mb-0">Monitoreo en tiempo real del inventario, existencias y movimientos por sucursal</p>
+        </div>
+        <div class="d-flex align-items-center gap-2 bg-white px-3 py-2 rounded-pill border shadow-sm">
+            <label for="filtroSucursalGlobal" class="fw-semibold text-secondary small mb-0 ps-1">Sucursal:</label>
+            <select id="filtroSucursalGlobal" class="form-select form-select-sm border-0 fw-semibold text-dark bg-transparent" style="min-width: 190px; box-shadow: none;" onchange="cambiarFiltroSucursal()">
+                <option value="0">Todas las sucursales</option>
+                @foreach (var suc in Model.Sucursales)
+                {
+                    <option value="@suc.Id">@suc.Nombre</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Indicadores -->
+    <div class="row g-3 text-center mb-4">
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-optimo h-100" onclick="filtrarPorEstadoSemaforo('Óptimo')">
+                <div class="card-body py-4">
+                    <div class="d-flex justify-content-between align-items-center px-2 mb-2">
+                        <h6 class="text-uppercase opacity-90 mb-0 small fw-semibold">Stock Óptimo</h6>
+                        <span class="badge bg-white text-success small" id="kpiOptimoPct">0%</span>
+                    </div>
+                    <p class="display-5 fw-bold mb-1" id="kpiOptimoCount">@Model.TotalOptimo</p>
+                    <small class="opacity-90 d-block">Abastecimiento normal</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-advertencia h-100" onclick="filtrarPorEstadoSemaforo('Advertencia')">
+                <div class="card-body py-4">
+                    <div class="d-flex justify-content-between align-items-center px-2 mb-2">
+                        <h6 class="text-uppercase opacity-90 mb-0 small fw-semibold">Stock en Advertencia</h6>
+                        <span class="badge bg-white text-warning small" id="kpiAdvertenciaPct">0%</span>
+                    </div>
+                    <p class="display-5 fw-bold mb-1" id="kpiAdvertenciaCount">@Model.TotalAdvertencia</p>
+                    <small class="opacity-90 d-block">Próximos al punto de reposición</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-critico h-100" onclick="filtrarPorEstadoSemaforo('Crítico')">
+                <div class="card-body py-4">
+                    <div class="d-flex justify-content-between align-items-center px-2 mb-2">
+                        <h6 class="text-uppercase opacity-90 mb-0 small fw-semibold">Stock Crítico</h6>
+                        <span class="badge bg-white text-danger small" id="kpiCriticoPct">0%</span>
+                    </div>
+                    <p class="display-5 fw-bold mb-1" id="kpiCriticoCount">@Model.TotalCritico</p>
+                    <small class="opacity-90 d-block">Requieren reposición inmediata</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-info h-100">
+                <div class="card-body py-4">
+                    <div class="d-flex justify-content-between align-items-center px-2 mb-2">
+                        <h6 class="text-uppercase opacity-90 mb-0 small fw-semibold">Movimientos</h6>
+                        <span class="badge bg-white text-primary small" id="kpiUnidadesTotales">@Model.TotalUnidadesStock u.</span>
+                    </div>
+                    <p class="display-5 fw-bold mb-1" id="kpiMovimientosCount">@Model.TotalMovimientos</p>
+                    <small class="opacity-90 d-block" id="kpiValorizadoTexto">Valorizado: $@Model.ValorTotalInventario.ToString("N0")</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barra de Ubicación (Solo se muestra al navegar dentro de una categoría o producto) -->
+    <div id="barraNavegacion" class="d-flex flex-wrap justify-content-between align-items-center bg-white border rounded-3 px-3 py-2 mb-4 shadow-sm d-none">
+        <nav aria-label="breadcrumb" class="mb-0">
+            <ol class="breadcrumb mb-0 small fw-semibold" id="breadcrumbNiveles"></ol>
+        </nav>
+        <div class="d-flex align-items-center gap-2">
+            <button id="btnDrillUp" class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="ejecutarDrillUp()">
+                ← Volver atrás
+            </button>
+            <button id="btnResetNivel1" class="btn btn-sm btn-light border rounded-pill px-3" onclick="irANivel1()">
+                Inicio
+            </button>
+        </div>
+    </div>
+
+    <!-- Gráficos Estadísticos -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 text-dark fw-bold">Estado del Inventario</h6>
+                    <small class="text-muted">Proporción de artículos según disponibilidad</small>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-center align-items-center" style="min-height: 260px;">
+                    <div style="width: 100%; max-width: 230px; height: 220px;">
+                        <canvas id="chartSemaforo"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-0 text-dark fw-bold" id="tituloGraficoBarras">Existencias vs. Stock Mínimo por Categoría</h6>
+                        <small class="text-muted" id="subtituloGraficoBarras">Seleccione una categoría para explorar sus artículos</small>
+                    </div>
+                </div>
+                <div class="card-body" style="min-height: 260px;">
+                    <div style="width: 100%; height: 240px;">
+                        <canvas id="chartPrincipal"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 1: CATEGORÍAS DE INVENTARIO -->
+    <div id="seccionNivel1" class="card mb-4">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="mb-0 text-dark fw-bold">Categorías de Productos</h5>
+                <small class="text-muted">Seleccione una categoría para consultar el detalle de sus artículos</small>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Categoría</th>
+                            <th class="text-center">Artículos</th>
+                            <th class="text-center">Stock Disponible</th>
+                            <th class="text-center">Stock Mínimo</th>
+                            <th class="text-end">Valorizado</th>
+                            <th class="text-center">Resumen de Estado</th>
+                            <th class="text-center">Estado General</th>
+                            <th class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaCategoriasBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 2: PRODUCTOS DE LA CATEGORÍA SELECCIONADA -->
+    <div id="seccionNivel2" class="card mb-4" style="display: none;">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="mb-0 text-dark fw-bold">
+                    Productos — <span id="lblCategoriaSeleccionada" class="text-primary"></span>
+                </h5>
+                <small class="text-muted">Seleccione un artículo para ver su distribución por sucursal y movimientos</small>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="irANivel1()">
+                ← Volver a Categorías
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Código SKU</th>
+                            <th>Producto</th>
+                            <th>Categoría</th>
+                            <th>Proveedor</th>
+                            <th class="text-end">Precio</th>
+                            <th class="text-center">Stock Actual</th>
+                            <th class="text-center">Stock Mínimo</th>
+                            <th class="text-center">Estado</th>
+                            <th class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaProductosNivel2Body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 3: DETALLE POR SUCURSAL E HISTORIAL DE MOVIMIENTOS DEL PRODUCTO -->
+    <div id="seccionNivel3" style="display: none;">
+        <div class="card mb-4">
+            <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-0 text-dark fw-bold">
+                        <span id="lblProductoNivel3" class="text-primary"></span>
+                    </h5>
+                    <small class="text-muted" id="subtituloProductoNivel3"></small>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="volverANivel2()">
+                        ← Volver a Productos
+                    </button>
+                    <button class="btn btn-sm btn-light border rounded-pill px-3" onclick="irANivel1()">
+                        Categorías
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-center" id="fichaProductoNivel3"></div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <!-- Existencias por Sucursal -->
+            <div class="col-lg-5">
+                <div class="card h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 text-dark fw-bold">Stock por Sucursal</h6>
+                        <a asp-action="Movimientos" class="btn btn-sm btn-outline-primary rounded-pill px-3">+ Nuevo Movimiento</a>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Sucursal</th>
+                                        <th class="text-center">Disponible</th>
+                                        <th class="text-center">Mínimo</th>
+                                        <th class="text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaSucursalesNivel3Body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historial de Movimientos del Producto -->
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 text-dark fw-bold">Historial de Movimientos</h6>
+                        <span class="badge bg-light text-secondary border" id="contadorMovimientosNivel3">0 registros</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Sucursal</th>
+                                        <th>Responsable</th>
+                                        <th class="text-center">Tipo</th>
+                                        <th class="text-end">Cantidad</th>
+                                        <th>Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaMovimientosNivel3Body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        const catalogoProductos = @Html.Raw(productosJson);
+        const stockPorSucursal = @Html.Raw(stockSucursalesJson);
+        const historialMovimientos = @Html.Raw(movimientosJson);
+
+        let nivelActual = 1;
+        let categoriaSeleccionada = null;
+        let estadoSemaforoFiltro = null;
+        let productoSeleccionadoId = null;
+        let sucursalFiltroId = 0;
+
+        let chartSemaforoInstance = null;
+        let chartPrincipalInstance = null;
+
+        function calcularEstadoSemaforo(stockActual, stockMinimo) {
+            if (stockActual <= stockMinimo) return 'Crítico';
+            if (stockActual <= stockMinimo * 1.10) return 'Advertencia';
+            return 'Óptimo';
+        }
+
+        function obtenerClaseBadge(estado) {
+            if (estado === 'Crítico') return 'bg-danger';
+            if (estado === 'Advertencia') return 'bg-warning text-dark';
+            return 'bg-success';
+        }
+
+        function obtenerColorHex(estado) {
+            if (estado === 'Crítico') return '#ef4444';
+            if (estado === 'Advertencia') return '#f59e0b';
+            return '#10b981';
+        }
+
+        function obtenerProductosSegunSucursal() {
+            if (sucursalFiltroId === 0) {
+                return catalogoProductos.map(p => ({ ...p }));
+            }
+            return catalogoProductos.map(p => {
+                const reg = stockPorSucursal.find(s => s.productoId === p.id && s.sucursalId === sucursalFiltroId);
+                const cant = reg ? reg.cantidadActual : 0;
+                const min = reg ? reg.puntoReorden : Math.max(5, Math.round(p.stockMinimo / 3));
+                const estado = calcularEstadoSemaforo(cant, min);
+                const pct = min > 0 ? Math.round(((cant - min) / min) * 1000) / 10 : 100;
+                return {
+                    ...p,
+                    stockActual: cant,
+                    stockMinimo: min,
+                    estado: estado,
+                    claseBadge: obtenerClaseBadge(estado),
+                    porcentajeSobreMinimo: pct
+                };
+            });
+        }
+
+        function cambiarFiltroSucursal() {
+            sucursalFiltroId = parseInt(document.getElementById('filtroSucursalGlobal').value, 10) || 0;
+            renderizarVistaActual();
+        }
+
+        function renderizarVistaActual() {
+            actualizarBreadcrumbsYBotones();
+            actualizarIndicadoresYGraficos();
+
+            if (nivelActual === 1) {
+                document.getElementById('seccionNivel1').style.display = 'block';
+                document.getElementById('seccionNivel2').style.display = 'none';
+                document.getElementById('seccionNivel3').style.display = 'none';
+                renderizarTablaCategoriasNivel1();
+            } else if (nivelActual === 2) {
+                document.getElementById('seccionNivel1').style.display = 'none';
+                document.getElementById('seccionNivel2').style.display = 'block';
+                document.getElementById('seccionNivel3').style.display = 'none';
+                renderizarTablaProductosNivel2();
+            } else if (nivelActual === 3) {
+                document.getElementById('seccionNivel1').style.display = 'none';
+                document.getElementById('seccionNivel2').style.display = 'none';
+                document.getElementById('seccionNivel3').style.display = 'block';
+                renderizarDetalleProductoNivel3();
+            }
+        }
+
+        function actualizarBreadcrumbsYBotones() {
+            const barraNav = document.getElementById('barraNavegacion');
+            const breadcrumb = document.getElementById('breadcrumbNiveles');
+
+            if (nivelActual === 1) {
+                barraNav.classList.add('d-none');
+                breadcrumb.innerHTML = '';
+            } else if (nivelActual === 2) {
+                barraNav.classList.remove('d-none');
+                const tituloNivel2 = categoriaSeleccionada
+                    ? categoriaSeleccionada
+                    : `Estado: ${estadoSemaforoFiltro}`;
+                breadcrumb.innerHTML = `
+                    <li class="breadcrumb-item">
+                        <a href="javascript:void(0)" onclick="irANivel1()" class="text-decoration-none text-secondary">Categorías</a>
+                    </li>
+                    <li class="breadcrumb-item active text-dark" aria-current="page">${tituloNivel2}</li>`;
+            } else if (nivelActual === 3) {
+                barraNav.classList.remove('d-none');
+                const prod = catalogoProductos.find(p => p.id === productoSeleccionadoId);
+                const catTexto = categoriaSeleccionada || (prod ? prod.categoriaNombre : 'Productos');
+                breadcrumb.innerHTML = `
+                    <li class="breadcrumb-item">
+                        <a href="javascript:void(0)" onclick="irANivel1()" class="text-decoration-none text-secondary">Categorías</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="javascript:void(0)" onclick="volverANivel2()" class="text-decoration-none text-secondary">${catTexto}</a>
+                    </li>
+                    <li class="breadcrumb-item active text-dark" aria-current="page">${prod ? prod.nombre : 'Detalle'}</li>`;
+            }
+        }
+
+        function obtenerProductosDelContextoActual() {
+            const prods = obtenerProductosSegunSucursal();
+            if (nivelActual === 1) return prods;
+            if (nivelActual === 2) {
+                return prods.filter(p => {
+                    const coincideCat = !categoriaSeleccionada || p.categoriaNombre === categoriaSeleccionada;
+                    const coincideEstado = !estadoSemaforoFiltro || p.estado === estadoSemaforoFiltro;
+                    return coincideCat && coincideEstado;
+                });
+            }
+            if (nivelActual === 3) {
+                return prods.filter(p => p.id === productoSeleccionadoId);
+            }
+            return prods;
+        }
+
+        function actualizarIndicadoresYGraficos() {
+            const prodsContexto = obtenerProductosDelContextoActual();
+            const totalProds = prodsContexto.length || 1;
+
+            const cantOptimo = prodsContexto.filter(p => p.estado === 'Óptimo').length;
+            const cantAdv = prodsContexto.filter(p => p.estado === 'Advertencia').length;
+            const cantCrit = prodsContexto.filter(p => p.estado === 'Crítico').length;
+
+            const unidadesTotales = prodsContexto.reduce((acc, p) => acc + p.stockActual, 0);
+            const valorizadoTotal = prodsContexto.reduce((acc, p) => acc + (p.stockActual * p.precioCosto), 0);
+
+            const idsProductosContexto = new Set(prodsContexto.map(p => p.id));
+            const movsContexto = historialMovimientos.filter(m =>
+                idsProductosContexto.has(m.productoId) &&
+                (sucursalFiltroId === 0 || m.sucursalId === sucursalFiltroId)
+            );
+
+            document.getElementById('kpiOptimoCount').innerText = cantOptimo;
+            document.getElementById('kpiOptimoPct').innerText = `${Math.round((cantOptimo / totalProds) * 100)}%`;
+
+            document.getElementById('kpiAdvertenciaCount').innerText = cantAdv;
+            document.getElementById('kpiAdvertenciaPct').innerText = `${Math.round((cantAdv / totalProds) * 100)}%`;
+
+            document.getElementById('kpiCriticoCount').innerText = cantCrit;
+            document.getElementById('kpiCriticoPct').innerText = `${Math.round((cantCrit / totalProds) * 100)}%`;
+
+            document.getElementById('kpiMovimientosCount').innerText = movsContexto.length;
+            document.getElementById('kpiUnidadesTotales').innerText = `${unidadesTotales} u.`;
+            document.getElementById('kpiValorizadoTexto').innerText = `Valorizado: $${valorizadoTotal.toLocaleString('es-AR')}`;
+
+            renderizarGraficoSemaforo(cantOptimo, cantAdv, cantCrit);
+            renderizarGraficoPrincipal(prodsContexto);
+        }
+
+        function renderizarGraficoSemaforo(optimo, advertencia, critico) {
+            const ctx = document.getElementById('chartSemaforo').getContext('2d');
+            if (chartSemaforoInstance) {
+                chartSemaforoInstance.destroy();
+            }
+
+            chartSemaforoInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Óptimo', 'Advertencia', 'Crítico'],
+                    datasets: [{
+                        data: [optimo, advertencia, critico],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 12, padding: 14, font: { size: 12 } }
+                        }
+                    },
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const estados = ['Óptimo', 'Advertencia', 'Crítico'];
+                            filtrarPorEstadoSemaforo(estados[index]);
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderizarGraficoPrincipal(prodsContexto) {
+            const ctx = document.getElementById('chartPrincipal').getContext('2d');
+            if (chartPrincipalInstance) {
+                chartPrincipalInstance.destroy();
+            }
+
+            const tituloEl = document.getElementById('tituloGraficoBarras');
+            const subtituloEl = document.getElementById('subtituloGraficoBarras');
+
+            if (nivelActual === 1) {
+                tituloEl.innerText = 'Existencias vs. Stock Mínimo por Categoría';
+                subtituloEl.innerText = 'Haga clic sobre una categoría para ver sus productos';
+
+                const categoriasNombres = [...new Set(catalogoProductos.map(p => p.categoriaNombre))];
+                const todosProdsSuc = obtenerProductosSegunSucursal();
+
+                const stockActualPorCat = [];
+                const stockMinPorCat = [];
+                const coloresCat = [];
+
+                categoriasNombres.forEach(cat => {
+                    const items = todosProdsSuc.filter(p => p.categoriaNombre === cat);
+                    stockActualPorCat.push(items.reduce((s, p) => s + p.stockActual, 0));
+                    stockMinPorCat.push(items.reduce((s, p) => s + p.stockMinimo, 0));
+
+                    const tieneCrit = items.some(p => p.estado === 'Crítico');
+                    const tieneAdv = items.some(p => p.estado === 'Advertencia');
+                    coloresCat.push(tieneCrit ? '#ef4444' : (tieneAdv ? '#f59e0b' : '#10b981'));
+                });
+
+                chartPrincipalInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: categoriasNombres,
+                        datasets: [
+                            {
+                                label: 'Stock Disponible (u.)',
+                                data: stockActualPorCat,
+                                backgroundColor: coloresCat,
+                                borderRadius: 6
+                            },
+                            {
+                                label: 'Stock Mínimo (u.)',
+                                data: stockMinPorCat,
+                                backgroundColor: '#cbd5e1',
+                                borderRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        onClick: (evt, elements) => {
+                            if (elements.length > 0) {
+                                const idx = elements[0].index;
+                                mostrarNivel2Categoria(categoriasNombres[idx]);
+                            }
+                        },
+                        plugins: { legend: { position: 'top' } },
+                        scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
+                    }
+                });
+            } else if (nivelActual === 2) {
+                const descFiltro = categoriaSeleccionada ? categoriaSeleccionada : `Estado ${estadoSemaforoFiltro}`;
+                tituloEl.innerText = `Stock Actual vs. Stock Mínimo — ${descFiltro}`;
+                subtituloEl.innerText = 'Haga clic sobre un producto para consultar su historial de movimientos';
+
+                const labels = prodsContexto.map(p => p.nombre);
+                const dataActual = prodsContexto.map(p => p.stockActual);
+                const dataMin = prodsContexto.map(p => p.stockMinimo);
+                const bgColors = prodsContexto.map(p => obtenerColorHex(p.estado));
+
+                chartPrincipalInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Stock Actual (u.)',
+                                data: dataActual,
+                                backgroundColor: bgColors,
+                                borderRadius: 6
+                            },
+                            {
+                                label: 'Stock Mínimo (u.)',
+                                data: dataMin,
+                                backgroundColor: '#cbd5e1',
+                                borderRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        onClick: (evt, elements) => {
+                            if (elements.length > 0) {
+                                const idx = elements[0].index;
+                                mostrarNivel3Producto(prodsContexto[idx].id);
+                            }
+                        },
+                        plugins: { legend: { position: 'top' } },
+                        scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
+                    }
+                });
+            } else if (nivelActual === 3) {
+                const prod = catalogoProductos.find(p => p.id === productoSeleccionadoId);
+                tituloEl.innerText = `Distribución por Sucursal — ${prod ? prod.nombre : ''}`;
+                subtituloEl.innerText = 'Comparativa de unidades disponibles frente al mínimo de cada sucursal';
+
+                const stocksProd = stockPorSucursal.filter(s => s.productoId === productoSeleccionadoId);
+                const labels = stocksProd.map(s => s.sucursalNombre);
+                const dataDisp = stocksProd.map(s => s.cantidadActual);
+                const dataReorden = stocksProd.map(s => s.puntoReorden);
+                const bgColors = stocksProd.map(s => obtenerColorHex(s.estado));
+
+                chartPrincipalInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Disponible en Sucursal (u.)',
+                                data: dataDisp,
+                                backgroundColor: bgColors,
+                                borderRadius: 6
+                            },
+                            {
+                                label: 'Mínimo por Sucursal (u.)',
+                                data: dataReorden,
+                                backgroundColor: '#cbd5e1',
+                                borderRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
+                    }
+                });
+            }
+        }
+
+        function renderizarTablaCategoriasNivel1() {
+            const tbody = document.getElementById('tablaCategoriasBody');
+            const todosProds = obtenerProductosSegunSucursal();
+            const categoriasNombres = [...new Set(catalogoProductos.map(p => p.categoriaNombre))];
+
+            let html = '';
+            categoriasNombres.forEach(catNombre => {
+                const items = todosProds.filter(p => p.categoriaNombre === catNombre);
+                const totalArticulos = items.length;
+                const stockTotal = items.reduce((s, p) => s + p.stockActual, 0);
+                const minTotal = items.reduce((s, p) => s + p.stockMinimo, 0);
+                const valorizado = items.reduce((s, p) => s + (p.stockActual * p.precioCosto), 0);
+
+                const cOpt = items.filter(p => p.estado === 'Óptimo').length;
+                const cAdv = items.filter(p => p.estado === 'Advertencia').length;
+                const cCrit = items.filter(p => p.estado === 'Crítico').length;
+
+                let estadoCat = 'Óptimo';
+                if (cCrit > 0) estadoCat = 'Crítico';
+                else if (cAdv > 0) estadoCat = 'Advertencia';
+
+                const badgeCat = obtenerClaseBadge(estadoCat);
+
+                html += `
+                    <tr role="button" onclick="mostrarNivel2Categoria('${catNombre}')">
+                        <td class="fw-semibold text-dark">${catNombre}</td>
+                        <td class="text-center"><span class="badge bg-light text-secondary border">${totalArticulos} productos</span></td>
+                        <td class="text-center fw-bold">${stockTotal} u.</td>
+                        <td class="text-center text-secondary">${minTotal} u.</td>
+                        <td class="text-end fw-semibold">$${valorizado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-center">
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 me-1">${cOpt} óptimos</span>
+                            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 me-1">${cAdv} alerta</span>
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">${cCrit} críticos</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge ${badgeCat}">${estadoCat}</span>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="event.stopPropagation(); mostrarNivel2Categoria('${catNombre}')">
+                                Ver Productos →
+                            </button>
+                        </td>
+                    </tr>`;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function renderizarTablaProductosNivel2() {
+            const tbody = document.getElementById('tablaProductosNivel2Body');
+            const lblTitulo = document.getElementById('lblCategoriaSeleccionada');
+
+            if (categoriaSeleccionada && estadoSemaforoFiltro) {
+                lblTitulo.innerText = `${categoriaSeleccionada} (${estadoSemaforoFiltro})`;
+            } else if (categoriaSeleccionada) {
+                lblTitulo.innerText = categoriaSeleccionada;
+            } else if (estadoSemaforoFiltro) {
+                lblTitulo.innerText = `Estado ${estadoSemaforoFiltro}`;
+            } else {
+                lblTitulo.innerText = 'Todos los productos';
+            }
+
+            const productosFiltrados = obtenerProductosDelContextoActual();
+
+            if (productosFiltrados.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            No se encontraron productos para este filtro.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            let html = '';
+            productosFiltrados.forEach(prod => {
+                html += `
+                    <tr role="button" onclick="mostrarNivel3Producto(${prod.id})">
+                        <td><code>${prod.codigoSku}</code></td>
+                        <td class="fw-semibold">${prod.nombre}</td>
+                        <td><span class="badge bg-light text-secondary border">${prod.categoriaNombre}</span></td>
+                        <td class="small text-secondary">${prod.proveedorNombre}</td>
+                        <td class="text-end">$${prod.precio.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                        <td class="text-center fw-bold">${prod.stockActual} u.</td>
+                        <td class="text-center text-secondary">${prod.stockMinimo} u.</td>
+                        <td class="text-center">
+                            <span class="badge ${prod.claseBadge}">${prod.estado}</span>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="event.stopPropagation(); mostrarNivel3Producto(${prod.id})">
+                                Ver Movimientos →
+                            </button>
+                        </td>
+                    </tr>`;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function renderizarDetalleProductoNivel3() {
+            const prodsSuc = obtenerProductosSegunSucursal();
+            const prod = prodsSuc.find(p => p.id === productoSeleccionadoId) || catalogoProductos.find(p => p.id === productoSeleccionadoId);
+            if (!prod) return;
+
+            document.getElementById('lblProductoNivel3').innerText = `${prod.nombre}`;
+            document.getElementById('subtituloProductoNivel3').innerText = `SKU: ${prod.codigoSku} · Categoría: ${prod.categoriaNombre} · Proveedor: ${prod.proveedorNombre}`;
+
+            document.getElementById('fichaProductoNivel3').innerHTML = `
+                <div class="col-md-3">
+                    <div class="p-3 bg-light rounded-3 text-center">
+                        <small class="text-muted d-block">Stock Disponible</small>
+                        <span class="fs-4 fw-bold text-dark">${prod.stockActual} u.</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 bg-light rounded-3 text-center">
+                        <small class="text-muted d-block">Stock Mínimo</small>
+                        <span class="fs-4 fw-bold text-secondary">${prod.stockMinimo} u.</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 bg-light rounded-3 text-center">
+                        <small class="text-muted d-block">Precio Unitario</small>
+                        <span class="fs-4 fw-bold text-dark">$${prod.precio.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 bg-light rounded-3 text-center">
+                        <small class="text-muted d-block mb-1">Estado Actual</small>
+                        <span class="badge ${prod.claseBadge} fs-6">${prod.estado}</span>
+                    </div>
+                </div>`;
+
+            const tbodySuc = document.getElementById('tablaSucursalesNivel3Body');
+            const stocksProd = stockPorSucursal.filter(s =>
+                s.productoId === productoSeleccionadoId &&
+                (sucursalFiltroId === 0 || s.sucursalId === sucursalFiltroId)
+            );
+
+            let htmlSuc = '';
+            stocksProd.forEach(s => {
+                htmlSuc += `
+                    <tr>
+                        <td class="fw-semibold">${s.sucursalNombre}</td>
+                        <td class="text-center fw-bold">${s.cantidadActual} u.</td>
+                        <td class="text-center text-secondary">${s.puntoReorden} u.</td>
+                        <td class="text-center"><span class="badge ${s.claseBadge}">${s.estado}</span></td>
+                    </tr>`;
+            });
+            tbodySuc.innerHTML = htmlSuc || `<tr><td colspan="4" class="text-center py-3 text-muted">Sin existencias registradas en esta sucursal.</td></tr>`;
+
+            const tbodyMov = document.getElementById('tablaMovimientosNivel3Body');
+            const movsProd = historialMovimientos.filter(m =>
+                m.productoId === productoSeleccionadoId &&
+                (sucursalFiltroId === 0 || m.sucursalId === sucursalFiltroId)
+            );
+
+            document.getElementById('contadorMovimientosNivel3').innerText = `${movsProd.length} movimientos`;
+
+            let htmlMov = '';
+            movsProd.forEach(m => {
+                const badgeOp = m.tipoMovimiento === 'ENTRADA' ? 'bg-success' : (m.tipoMovimiento === 'SALIDA' ? 'bg-danger' : 'bg-warning text-dark');
+                const claseCant = m.cantidad >= 0 ? 'text-success fw-bold' : 'text-danger fw-bold';
+                const prefijo = m.cantidad >= 0 ? '+' : '';
+                htmlMov += `
+                    <tr>
+                        <td class="small">${m.fechaFormateada}</td>
+                        <td>${m.sucursalNombre}</td>
+                        <td><code>${m.usuarioNombre}</code></td>
+                        <td class="text-center"><span class="badge ${badgeOp}">${m.tipoMovimiento}</span></td>
+                        <td class="text-end ${claseCant}">${prefijo}${m.cantidad} u.</td>
+                        <td class="small text-secondary">${m.motivo || '-'}</td>
+                    </tr>`;
+            });
+            tbodyMov.innerHTML = htmlMov || `<tr><td colspan="6" class="text-center py-3 text-muted">No hay movimientos registrados para este producto.</td></tr>`;
+        }
+
+        function mostrarNivel2Categoria(categoria) {
+            categoriaSeleccionada = categoria;
+            estadoSemaforoFiltro = null;
+            productoSeleccionadoId = null;
+            nivelActual = 2;
+            renderizarVistaActual();
+            document.getElementById('seccionNivel2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function filtrarPorEstadoSemaforo(estado) {
+            estadoSemaforoFiltro = estado;
+            if (nivelActual === 1) {
+                categoriaSeleccionada = null;
+            }
+            productoSeleccionadoId = null;
+            nivelActual = 2;
+            renderizarVistaActual();
+            document.getElementById('seccionNivel2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function mostrarNivel3Producto(idProducto) {
+            const prod = catalogoProductos.find(p => p.id === idProducto);
+            if (prod && !categoriaSeleccionada) {
+                categoriaSeleccionada = prod.categoriaNombre;
+            }
+            productoSeleccionadoId = idProducto;
+            nivelActual = 3;
+            renderizarVistaActual();
+            document.getElementById('seccionNivel3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function volverANivel2() {
+            productoSeleccionadoId = null;
+            nivelActual = 2;
+            renderizarVistaActual();
+        }
+
+        function irANivel1() {
+            categoriaSeleccionada = null;
+            estadoSemaforoFiltro = null;
+            productoSeleccionadoId = null;
+            nivelActual = 1;
+            renderizarVistaActual();
+        }
+
+        function ejecutarDrillUp() {
+            if (nivelActual === 3) {
+                volverANivel2();
+            } else if (nivelActual === 2) {
+                irANivel1();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderizarVistaActual();
+        });
+    </script>
+}

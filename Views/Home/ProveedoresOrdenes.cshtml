@@ -1,0 +1,232 @@
+@model ControlInventario.Models.DashboardViewModel
+@{
+    ViewData["Title"] = "Proveedores y Compras";
+}
+
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+        <div>
+            <h2 class="fw-bold mb-1">Proveedores y Órdenes de Compra</h2>
+            <p class="text-muted mb-0">Directorio de abastecedores y gestión de reposición de stock con impacto automático en el inventario</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#modalNuevoProveedor">
+                + Nuevo Proveedor
+            </button>
+            <button class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#modalNuevaOrden">
+                + Emitir Orden de Compra
+            </button>
+        </div>
+    </div>
+
+    @if (TempData["Mensaje"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 mb-4" role="alert">
+            <strong>✔ Gestión de Abastecimiento:</strong> @TempData["Mensaje"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+        </div>
+    }
+
+    <!-- Directorio de Proveedores -->
+    <div class="card mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-dark">Proveedores Homologados</h5>
+            <span class="badge bg-light text-secondary border">@Model.Proveedores.Count activos</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Razón Social</th>
+                            <th>CUIT</th>
+                            <th>Teléfono</th>
+                            <th>Email Comercial</th>
+                            <th>Dirección</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var prov in Model.Proveedores)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@prov.RazonSocial</td>
+                                <td>@prov.Cuit</td>
+                                <td>@prov.Telefono</td>
+                                <td>@prov.Email</td>
+                                <td>@prov.Direccion</td>
+                                <td class="text-center"><span class="badge bg-success">Activo</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Órdenes de Compra -->
+    <div class="card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-dark">Órdenes de Compra (Reposición de Stock)</h5>
+            <span class="badge bg-light text-secondary border">@Model.OrdenesCompra.Count órdenes registradas</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>N° Orden</th>
+                            <th>Proveedor</th>
+                            <th>Sucursal Destino</th>
+                            <th>Fecha Emisión</th>
+                            <th>Detalle del Pedido</th>
+                            <th class="text-end">Total</th>
+                            <th class="text-center">Estado</th>
+                            <th class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var oc in Model.OrdenesCompra)
+                        {
+                            bool recibida = oc.Estado == "RECIBIDA";
+                            <tr>
+                                <td><code>@oc.NumeroOrden</code></td>
+                                <td class="fw-semibold">@oc.ProveedorNombre</td>
+                                <td>@oc.SucursalDestinoNombre</td>
+                                <td>@oc.FechaEmision.ToString("yyyy-MM-dd")</td>
+                                <td>@oc.CantidadSolicitada u. @oc.ProductoNombre</td>
+                                <td class="text-end fw-bold">$@oc.Total.ToString("N2")</td>
+                                <td class="text-center">
+                                    @if (recibida)
+                                    {
+                                        <span class="badge bg-success">Recibida</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">Pendiente</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (recibida)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" disabled>Completada</button>
+                                    }
+                                    else
+                                    {
+                                        <form asp-action="RecibirOrden" method="post" class="d-inline">
+                                            <input type="hidden" name="id" value="@oc.Id" />
+                                            <button type="submit" class="btn btn-sm btn-success rounded-pill px-3">
+                                                Recibir Mercadería (+Stock)
+                                            </button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nuevo Proveedor -->
+<div class="modal fade" id="modalNuevoProveedor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="CrearProveedor" method="post">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Registrar Proveedor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Razón Social</label>
+                        <input type="text" name="razonSocial" class="form-control" placeholder="Ej: Distribuidora Mayorista S.A." required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">CUIT</label>
+                        <input type="text" name="cuit" class="form-control" placeholder="30-XXXXXXXX-X" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Teléfono</label>
+                        <input type="text" name="telefono" class="form-control" placeholder="0341-4XX-XXXX" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Email</label>
+                        <input type="email" name="email" class="form-control" placeholder="ventas@proveedor.com.ar" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Dirección</label>
+                        <input type="text" name="direccion" class="form-control" placeholder="Av. Ovidio Lagos 4500, Rosario" />
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark rounded-pill px-4">Guardar Proveedor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nueva Orden de Compra -->
+<div class="modal fade" id="modalNuevaOrden" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="EmitirOrden" method="post">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Emitir Orden de Compra</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Proveedor</label>
+                            <select name="proveedorId" class="form-select">
+                                @foreach (var prov in Model.Proveedores)
+                                {
+                                    <option value="@prov.Id">@prov.RazonSocial</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Sucursal de Destino</label>
+                            <select name="sucursalDestinoId" class="form-select">
+                                @foreach (var suc in Model.Sucursales)
+                                {
+                                    <option value="@suc.Id">@suc.Nombre</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Producto a Reponer</label>
+                            <select name="productoId" class="form-select">
+                                @foreach (var prod in Model.Productos)
+                                {
+                                    <option value="@prod.Id">@prod.Nombre (@prod.ObtenerEstadoSemaforo() - Stock: @prod.StockActual u.)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Cantidad</label>
+                            <input type="number" name="cantidad" min="1" class="form-control" value="100" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Costo Unitario ($)</label>
+                            <input type="number" step="0.01" name="costoUnitario" class="form-control" value="1400.00" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Observaciones</label>
+                            <input type="text" name="observaciones" class="form-control" placeholder="Notas de entrega o reposición por stock crítico" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Emitir Orden</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

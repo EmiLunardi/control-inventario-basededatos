@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Control de Inventario</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/ControlInventario.styles.css" asp-append-version="true" />
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-lg navbar-dark custom-navbar shadow-sm mb-4">
+            <div class="container-fluid px-4">
+                <a class="navbar-brand fw-bold d-flex align-items-center gap-2" asp-area="" asp-controller="Home" asp-action="Index">
+                    <span>Control de Inventario</span>
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                        aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav flex-grow-1 ms-3 gap-1">
+                        <li class="nav-item">
+                            <a class="nav-link px-3 rounded" asp-controller="Home" asp-action="Index">Tablero de Control</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link px-3 rounded" asp-controller="Home" asp-action="Productos">Catálogo de Productos</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link px-3 rounded" asp-controller="Home" asp-action="Movimientos">Movimientos de Stock</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link px-3 rounded" asp-controller="Home" asp-action="ProveedoresOrdenes">Proveedores y Compras</a>
+                        </li>
+                    </ul>
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <div class="d-flex align-items-center text-white">
+                            <span class="me-3 small opacity-90">
+                                Hola, <strong>@User.Identity.Name</strong>
+                                <span class="badge bg-light text-dark ms-1">@User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</span>
+                            </span>
+                            <a asp-controller="Account" asp-action="Logout" class="btn btn-outline-light btn-sm px-3 rounded-pill">Cerrar Sesión</a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </nav>
+    </header>
+    <div class="container-fluid px-4">
+        <main role="main" class="pb-4">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer class="border-top footer text-muted bg-white mt-4 py-3">
+        <div class="container-fluid px-4 text-center small">
+            &copy; 2026 - Sistema de Control de Inventario y Stock - Gestión Logística
+        </div>
+    </footer>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
